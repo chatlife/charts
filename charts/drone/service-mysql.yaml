@@ -1,0 +1,113 @@
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv-drone
+  namespace: drone
+  labels:
+    name: pv-drone
+spec:
+  storageClassName: drone-storageclass
+  capacity:
+    storage: 2Gi
+  accessModes:
+    - ReadWriteOnce
+  hostPath:
+    path: "/var/lib/drone"
+---
+
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: pv-drone-database-mysql
+  namespace: drone
+  labels:
+    name: pv-database-mysql
+spec:
+  storageClassName: mysql-drone-storageclass
+  capacity:
+    storage: 2Gi
+  accessModes:
+    - ReadWriteOnce
+  hostPath:
+    path: "/mnt/data"
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mysql-drone-pv-claim
+  namespace: drone
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 2Gi
+  storageClassName: mysql-drone-storageclass
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: k8s-drone-mysql
+  namespace: drone
+  labels:
+    app: k8s-drone
+spec:
+  selector:
+    matchLabels:
+      app: k8s-drone
+      tier: mysql
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: k8s-drone
+        tier: mysql
+    spec:
+      containers:
+        - image: mysql:5.7
+          name: mysql
+          args:
+            - --character-set-server=utf8
+            - --innodb_log_buffer_size=32M
+            - --innodb_log_file_size=80M
+            - --max_allowed_packet=8M
+            - "--ignore-db-dir=lost+found"
+            - --default-authentication-plugin=mysql_native_password
+          env:
+            - name: MYSQL_ROOT_PASSWORD
+              value: hoanghao11
+
+            - name: MYSQL_USER
+              value: drone
+
+            - name: MYSQL_PASSWORD
+              value: hoanghao11
+
+            - name: MYSQL_DATABASE
+              value: drone
+          ports:
+            - containerPort: 3306
+              name: mysql
+          volumeMounts:
+            - name: mysql-persistent-storage
+              mountPath: /var/lib/mysql
+      volumes:
+        - name: mysql-persistent-storage
+          persistentVolumeClaim:
+            claimName: mysql-drone-pv-claim
+
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: mysql-service
+  namespace: drone
+spec:
+  selector:
+    app: k8s-drone
+    tier: mysql
+  ports:
+    - protocol: TCP
+      port: 3306
+      targetPort: 3306
